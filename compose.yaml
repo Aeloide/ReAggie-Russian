@@ -1,0 +1,68 @@
+services:
+  mongo:
+    image: mongo:7.0
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGOUSER:?Set MONGOUSER in .env}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGOPASS:?Set MONGOPASS in .env}
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - "db.adminCommand('ping').ok"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  reaggie:
+    security_opt:
+      - seccomp:./seccomp-reaggie.json
+    image: ghcr.io/aeloide/reaggie:latest
+    restart: unless-stopped
+    init: true
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      PORT: "8999"
+      DOMAIN: ${DOMAIN:-localhost}
+      MONGOUSER: ${MONGOUSER}
+      MONGOPASS: ${MONGOPASS}
+      MONGOHOST: mongo:27017
+      SESSION_SECRET: ${SESSION_SECRET}
+      LOCALES_DIR: /app/locales
+      CF_AUTHKEY: ${CF_AUTHKEY:-}
+      CF_EMAIL: ${CF_EMAIL:-}
+      CF_ZONE: ${CF_ZONE:-}
+      DISCORD_APP_ID: ${DISCORD_APP_ID:-}
+      DISCORD_APP_SECRET: ${DISCORD_APP_SECRET:-}
+      TWITCH_APP_ID: ${TWITCH_APP_ID:-}
+      TWITCH_APP_SECRET: ${TWITCH_APP_SECRET:-}
+      VAPID_EMAIL: ${VAPID_EMAIL:-}
+      VAPID_PUBLIC: ${VAPID_PUBLIC:-}
+      VAPID_PRIVATE: ${VAPID_PRIVATE:-}
+    ports:
+      - "8999:8999"
+    volumes:
+      - ./data/assets:/app/backend/assets
+      - ./data/comic:/app/backend/comic
+      - ./data/replays:/app/backend/replays
+      - ./locales:/app/locales:ro
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8999/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  mongo_data:
